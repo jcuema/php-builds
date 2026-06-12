@@ -95,19 +95,18 @@ jobs:
           ./spc --version
 
       - name: Download de Fontes (PHP + Dependências C + Extensões)
-        # O SPC resolve "8.5" para a versão patch mais recente (ex: 8.5.5) automaticamente
         run: |
-          ./spc.phar download --with-php="${{ inputs.php_version }}" \
+          ./spc download --with-php="${{ inputs.php_version }}" \
           --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,imagick,intl,ldap,lz4,mbstring,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug"
 
       - name: Compilar PHP Estático e Xdebug Dinâmico
         run: |
-          # Define o target de compilação se especificado na matriz (crucial para Linux glibc)
           if [ -n "${{ matrix.target }}" ]; then
             export SPC_TARGET="${{ matrix.target }}"
           fi
           
-          ./spc.phar build "bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,imagick,intl,ldap,lz4,mbstring,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib" \
+          # Removido o .phar aqui também
+          ./spc build "bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,imagick,intl,ldap,lz4,mbstring,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib" \
             --build-cli \
             --build-fpm \
             --build-shared="xdebug"
