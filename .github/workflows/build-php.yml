@@ -95,6 +95,8 @@ jobs:
           ./spc --version
 
       - name: Download de Fontes (PHP + Dependências C + Extensões)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ./spc download --with-php="${{ inputs.php_version }}" \
           --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,imagick,intl,ldap,lz4,mbstring,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug"
