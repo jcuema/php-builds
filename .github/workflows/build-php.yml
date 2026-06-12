@@ -89,7 +89,12 @@ jobs:
           tar -xzf "$SPC_FILE"
           chmod +x spc
           
-          # Audita o sistema e injeta compilações C ausentes (ex: pkg-config no macOS)
+          # Injeta o target ANTES do doctor para que ele instale o compilador Zig no Linux
+          if [ -n "${{ matrix.target }}" ]; then
+            export SPC_TARGET="${{ matrix.target }}"
+          fi
+          
+          # Audita o sistema e injeta compilações C ausentes
           ./spc doctor --auto-fix
 
       - name: Download de Fontes (PHP + Dependências C + Extensões)
