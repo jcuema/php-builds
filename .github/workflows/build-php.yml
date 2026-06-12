@@ -94,7 +94,6 @@ jobs:
             export SPC_TARGET="${{ matrix.target }}"
           fi
           
-          # Audita o sistema e injeta compilações C ausentes
           ./spc doctor --auto-fix
 
       - name: Download de Fontes (PHP + Dependências C + Extensões)
@@ -102,7 +101,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ./spc download --with-php="${{ inputs.php_version }}" \
-          --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,imagick,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug"
+          --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug"
 
       - name: Compilar PHP Estático e Xdebug Dinâmico
         run: |
@@ -110,7 +109,7 @@ jobs:
             export SPC_TARGET="${{ matrix.target }}"
           fi
           
-          ./spc build "bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,imagick,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib" \
+          ./spc build "bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib" \
             --build-cli \
             --build-fpm \
             --build-shared="xdebug"
@@ -118,21 +117,18 @@ jobs:
       - name: Estruturar Diretórios e Gerar Tarball
         id: package
         run: |
-          # Extrai a versão exata compilada
           EXACT_VERSION=$(./buildroot/bin/php -r "echo PHP_VERSION;")
           
-          # Renderiza a informação no painel de Resumo do GitHub Actions
+          # Exibe o resultado de forma limpa na dashboard do Actions
           echo "### 🚀 Build Concluído: ${{ matrix.os_name }} (${{ matrix.arch }})" >> $GITHUB_STEP_SUMMARY
           echo "- **Versão Exata do PHP:** \`$EXACT_VERSION\`" >> $GITHUB_STEP_SUMMARY
           
-          # Estruturação de diretórios
           mkdir -p release_talos/bin release_talos/ext
           cp buildroot/bin/php release_talos/bin/
           cp buildroot/bin/php-fpm release_talos/bin/
           
           find buildroot/ -name "xdebug.so" -exec cp {} release_talos/ext/ \;
           
-          # Empacotamento
           TAR_FILENAME="php-${{ inputs.php_version }}-${{ matrix.os_name }}-${{ matrix.arch }}.tar.gz"
           cd release_talos
           tar -czf "../$TAR_FILENAME" bin ext
