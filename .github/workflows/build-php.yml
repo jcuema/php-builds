@@ -1,0 +1,142 @@
+name: Build Static PHP
+
+on:
+  workflow_dispatch:
+    inputs:
+      php_version:
+        description: 'Versão do PHP (ex: 8.3, 8.4, 8.5)'
+        required: true
+        default: '8.5'
+        type: string
+      build_mac_arm:
+        description: 'macOS ARM64 (Apple Silicon)'
+        type: boolean
+        default: true
+      build_linux_amd:
+        description: 'Linux AMD64'
+        type: boolean
+        default: true
+      build_linux_arm:
+        description: 'Linux ARM64'
+        type: boolean
+        default: true
+
+jobs:
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        run: |
+          MATRIX="[]"
+          
+          if [ "${{ inputs.build_mac_arm }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq '. += [{"os_runner": "macos-14", "os_name": "darwin", "arch": "arm64", "target": ""}]')
+          fi
+          if [ "${{ inputs.build_linux_amd }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq '. += [{"os_runner": "ubuntu-24.04", "os_name": "linux", "arch": "amd64", "target": "x86_64-linux-gnu"}]')
+          fi
+          if [ "${{ inputs.build_linux_arm }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq '. += [{"os_runner": "ubuntu-24.04-arm", "os_name": "linux", "arch": "arm64", "target": "aarch64-linux-gnu"}]')
+          fi
+          
+          echo "matrix={\"include\":$MATRIX}" >> $GITHUB_OUTPUT
+
+  build:
+    needs: setup-matrix
+    if: ${{ fromJson(needs.setup-matrix.outputs.matrix).include[0] != null }}
+    runs-on: ${{ matrix.os_runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Instalar Dependências de Build (Linux)
+        if: matrix.os_name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget curl jq musl-tools \
+            build-essential autoconf libtool bison re2c pkg-config
+
+      - name: Baixar e Configurar SPC (static-php-cli)
+        run: |
+          wget -O spc.phar "https://github.com/crazywhalecc/static-php-cli/releases/latest/download/spc.phar"
+          chmod +x spc.phar
+
+      - name: Download de Fontes (PHP + Dependências C + Extensões)
+        # O SPC resolve "8.5" para a versão patch mais recente (ex: 8.5.5) automaticamente
+        run: |
+          ./spc.phar download --with-php="${{ inputs.php_version }}" \
+          --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,imagick,intl,ldap,lz4,mbstring,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug"
+
+      - name: Compilar PHP Estático e Xdebug Dinâmico
+        run: |
+          # Define o target de compilação se especificado na matriz (crucial para Linux glibc)
+          if [ -n "${{ matrix.target }}" ]; then
+            export SPC_TARGET="${{ matrix.target }}"
+          fi
+          
+          ./spc.phar build "bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,imagick,intl,ldap,lz4,mbstring,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib" \
+            --build-cli \
+            --build-fpm \
+            --build-shared="xdebug"
+
+      - name: Estruturar Diretórios, Identificar Versão e Gerar Tarball
+        id: package
+        run: |
+          # 1. Recupera a versão exata que foi compilada executando o próprio binário gerado
+          EXACT_VERSION=$(./buildroot/bin/php -r "echo PHP_VERSION;")
+          echo "Versão exata descoberta: $EXACT_VERSION"
+          echo "exact_version=$EXACT_VERSION" >> $GITHUB_OUTPUT
+          
+          # 2. Cria a árvore de diretórios exigida
+          mkdir -p release_talos/bin release_talos/ext
+          cp buildroot/bin/php release_talos/bin/
+          cp buildroot/bin/php-fpm release_talos/bin/
+          
+          # O SPC aloca módulos shared em locais diferentes dependendo do target, o find garante a extração
+          find buildroot/ -name "xdebug.so" -exec cp {} release_talos/ext/ \;
+          
+          # 3. Empacota utilizando o formato e nomenclatura estrita
+          TAR_FILENAME="php-${EXACT_VERSION}-${{ matrix.os_name }}-${{ matrix.arch }}.tar.gz"
+          cd release_talos
+          tar -czf "../$TAR_FILENAME" bin ext
+          cd ..
+          
+          # 4. Exporta o nome do arquivo para os próximos passos
+          echo "tar_filename=$TAR_FILENAME" >> $GITHUB_OUTPUT
+
+      - name: Gerar Manifesto JSON
+        run: |
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          cat <<EOF > manifest-${{ matrix.os_name }}-${{ matrix.arch }}.json
+          {
+            "php_version": "${{ steps.package.outputs.exact_version }}",
+            "build_date": "$BUILD_DATE",
+            "os": "${{ matrix.os_name }}",
+            "arch": "${{ matrix.arch }}"
+          }
+          EOF
+
+      - name: Upload Artifact (Apenas para Retenção do Actions)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.tar_filename }}
+          path: |
+            ${{ steps.package.outputs.tar_filename }}
+            manifest-${{ matrix.os_name }}-${{ matrix.arch }}.json
+
+      - name: Publicar na Release 'latest'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create latest \
+            --title "Talos Latest Binaries" \
+            --notes "Binários estáticos do ecossistema Talos, gerados automaticamente." || true
+            
+          gh release upload latest ./${{ steps.package.outputs.tar_filename }} --clobber
+          gh release upload latest ./manifest-${{ matrix.os_name }}-${{ matrix.arch }}.json --clobber
