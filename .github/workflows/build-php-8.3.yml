@@ -84,22 +84,20 @@ jobs:
           --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug" \
           --for-libs="libjpeg,libwebp,freetype"
 
-      - name: Extração e Neutralização Física (Apenas AMD64)
+      - name: Extração Nativa e Neutralização Física (Apenas AMD64)
         run: |
           if [ "${{ matrix.arch }}" == "amd64" ]; then
-            echo "1. Extraindo todas as fontes via SPC (Garante diretório source/)"
-            ./spc extract --all
+            echo "1. Extraindo código-fonte do PHP via ferramenta oficial..."
+            ./spc extract php-src
             
-            echo "2. Injetando bloqueios no Autoconf (configure)"
-            sed -i '2i export php_cv_cc_avx512f=no' source/php-src/configure
-            sed -i '2i export php_cv_cc_avx512vbmi=no' source/php-src/configure
-            sed -i '2i export ac_cv_func_ifunc=no' source/php-src/configure
-            
-            echo "3. Renomeando macros de hardware no código C para cegar o compilador Zig"
+            echo "2. Assassinando macros AVX512 na raiz do C..."
             find source/php-src/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i \
               -e 's/__AVX512F__/__DISABLED_AVX512__/g' \
               -e 's/__AVX512VBMI__/__DISABLED_AVX512__/g' \
               -e 's/__AVX512VL__/__DISABLED_AVX512__/g' {} +
+              
+            echo "3. Desativando IFUNC no Autoconf..."
+            sed -i '2i export ac_cv_func_ifunc=no' source/php-src/configure
           fi
 
       - name: Compilar PHP Estático
