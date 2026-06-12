@@ -68,7 +68,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # 1. Determina o nome correto do artefato baseado na matriz atual
           if [ "${{ matrix.os_name }}" == "darwin" ]; then
             SPC_OS="macos"
           else
@@ -84,15 +83,13 @@ jobs:
           SPC_FILE="spc-${SPC_OS}-${SPC_ARCH}.tar.gz"
           echo "Baixando o binário nativo: $SPC_FILE"
           
-          # 2. Usa o GitHub CLI para baixar o asset do último release
           gh release download --repo crazywhalecc/static-php-cli --pattern "$SPC_FILE"
           
-          # 3. Extrai e configura o binário
           tar -xzf "$SPC_FILE"
           chmod +x spc
           
-          # Valida se o binário está executando
-          ./spc --version
+          # Audita o sistema operacional e instala pacotes de compilação ausentes
+          ./spc doctor --auto-fix
 
       - name: Download de Fontes (PHP + Dependências C + Extensões)
         env:
