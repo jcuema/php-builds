@@ -60,7 +60,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y wget curl jq musl-tools build-essential autoconf libtool bison re2c pkg-config
 
-      - name: Baixar e Configurar SPC (static-php-cli)
+      - name: Baixar e Configurar SPC
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -76,23 +76,13 @@ jobs:
           fi
           ./spc doctor --auto-fix
 
-      - name: Download de Fontes (Injetando libs gráficas)
+      - name: Download de Fontes (Com libs WebP/Gráficas)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ./spc download --with-php="${{ env.PHP_TARGET_VERSION }}" \
           --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug" \
           --for-libs="libjpeg,libwebp,freetype"
-
-      - name: Patch Cirúrgico no Código-Fonte (Apenas AMD64)
-        if: matrix.os_name == 'linux' && matrix.arch == 'amd64'
-        run: |
-          echo "Injetando bloqueio de IFUNC direto no Autoconf do PHP para contornar bug do linker..."
-          # Adiciona a exportação na linha 2 do script configure recém-baixado
-          sed -i '2i export ac_cv_func_ifunc=no' source/php-src/configure
-          
-          # Suprime os erros de ponteiros legados direto no script de build do SPC
-          sed -i 's/EXTRA_CFLAGS="/EXTRA_CFLAGS="-Wno-incompatible-pointer-types -Wno-implicit-function-declaration -Wno-int-conversion /g' source/php-src/configure
 
       - name: Compilar PHP Estático
         run: |
@@ -105,6 +95,15 @@ jobs:
             --build-fpm \
             --build-shared="xdebug" \
             --with-libs="libjpeg,libwebp,freetype"
+
+      - name: 🚨 Capturar Erro Real do Compilador (Rede de Segurança)
+        if: failure() && matrix.arch == 'amd64'
+        run: |
+          echo "### 🚨 Falha Estrutural: PHP ${{ env.PHP_TARGET_VERSION }} (AMD64)" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          tail -n 150 /home/runner/work/php-builds/php-builds/log/spc.shell.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 150 /home/runner/work/php-builds/php-builds/log/spc.shell.log
 
       - name: Estruturar e Empacotar
         id: package
