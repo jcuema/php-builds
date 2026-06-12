@@ -38,7 +38,7 @@ jobs:
             MATRIX=$(echo $MATRIX | jq -c '. += [{"os_runner": "ubuntu-24.04", "os_name": "linux", "arch": "amd64", "target": "x86_64-linux-gnu"}]')
           fi
           if [ "${{ inputs.build_linux_arm }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq -c '. += [{"os_runner": "ubuntu-24.04-arm", "os_name": "linux", "arch": "arm64", "target": "aarch64-linux-gnu"}]')
+            MATRIX=$(echo $MATRIX | jq -c '. += [{"os_runner": "ubuntu-24-arm", "os_name": "linux", "arch": "arm64", "target": "aarch64-linux-gnu"}]')
           fi
           echo "matrix={\"include\":$MATRIX}" >> $GITHUB_OUTPUT
 
@@ -84,16 +84,19 @@ jobs:
           --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug" \
           --for-libs="libjpeg,libwebp,freetype"
 
-      - name: Extrair Fontes e Aplicar Patch Cirúrgico (Apenas AMD64)
+      - name: Extração Nativa e Patch Cirúrgico (Apenas AMD64)
         run: |
-          # Extrai os fontes baixados para podermos manipulá-los
-          ./spc extract
-          
-          # Injeta bloqueios rigorosos no script interno do PHP 8.3 para arquitetura x86_64
           if [ "${{ matrix.arch }}" == "amd64" ]; then
-            echo "Desativando instruções AVX512 e IFUNC para compatibilidade do compilador LLVM/Zig..."
-            sed -i '2i export CFLAGS="$CFLAGS -mno-avx512f -mno-avx512vbmi"' source/php-src/configure
-            sed -i '3i export ac_cv_func_ifunc=no' source/php-src/configure
+            echo "Extraindo PHP 8.3 manualmente para bypass do SPC..."
+            mkdir -p source/php-src
+            tar -xzf downloads/php-8.3*.tar.gz -C source/php-src --strip-components=1
+            
+            echo "Assassinando chamadas AVX512 no código-fonte do PHP..."
+            find source/php-src/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/__AVX512F__/__DISABLE_AVX512F__/g' {} +
+            find source/php-src/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/__AVX512VBMI__/__DISABLE_AVX512VBMI__/g' {} +
+            
+            echo "Desativando detecção de IFUNC..."
+            sed -i '2i export ac_cv_func_ifunc=no' source/php-src/configure
           fi
 
       - name: Compilar PHP Estático
