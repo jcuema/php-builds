@@ -88,7 +88,8 @@ jobs:
         run: |
           if [ "${{ matrix.arch }}" == "amd64" ]; then
             echo "Extraindo fontes do PHP via ferramenta oficial..."
-            ./spc extract php
+            # Correção vital: a chave interna da ferramenta é 'php-src'
+            ./spc extract php-src
             
             echo "Assassinando chamadas AVX512 no código-fonte do PHP..."
             find source/php-src/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/__AVX512F__/__DISABLE_AVX512F__/g' {} +
