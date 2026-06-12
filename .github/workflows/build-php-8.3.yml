@@ -84,25 +84,18 @@ jobs:
           --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug" \
           --for-libs="libjpeg,libwebp,freetype"
 
-      - name: Extração via SPC e Patch Cirúrgico (Apenas AMD64)
-        run: |
-          if [ "${{ matrix.arch }}" == "amd64" ]; then
-            echo "Extraindo fontes do PHP via ferramenta oficial..."
-            # Correção vital: a chave interna da ferramenta é 'php-src'
-            ./spc extract php-src
-            
-            echo "Assassinando chamadas AVX512 no código-fonte do PHP..."
-            find source/php-src/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/__AVX512F__/__DISABLE_AVX512F__/g' {} +
-            find source/php-src/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/__AVX512VBMI__/__DISABLE_AVX512VBMI__/g' {} +
-            
-            echo "Desativando detecção de IFUNC..."
-            sed -i '2i export ac_cv_func_ifunc=no' source/php-src/configure
-          fi
-
       - name: Compilar PHP Estático
         run: |
           if [ -n "${{ matrix.target }}" ]; then
             export SPC_TARGET="${{ matrix.target }}"
+          fi
+          
+          # [NÍVEL DE ARQUITETURA] Injeção direta no cache do Autoconf para desativar 
+          # instruções vetoriais sem precisarmos abrir os arquivos .c
+          if [ "${{ matrix.arch }}" == "amd64" ]; then
+            export php_cv_cc_avx512f=no
+            export php_cv_cc_avx512vbmi=no
+            export ac_cv_func_ifunc=no
           fi
           
           ./spc build "bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib" \
@@ -111,7 +104,7 @@ jobs:
             --build-shared="xdebug" \
             --with-libs="libjpeg,libwebp,freetype"
 
-      - name: 🚨 Capturar Erro Real do Compilador
+      - name: 🚨 Capturar Erro Real do Compilador (Rede de Segurança)
         if: failure() && matrix.arch == 'amd64'
         run: |
           echo "### 🚨 Falha Estrutural: PHP ${{ env.PHP_TARGET_VERSION }} (AMD64)" >> $GITHUB_STEP_SUMMARY
