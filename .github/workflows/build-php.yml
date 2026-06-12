@@ -75,15 +75,21 @@ jobs:
 
       - name: Compilar PHP Estático e Xdebug Dinâmico
         run: |
-          # Define o target de compilação se especificado na matriz (crucial para Linux glibc)
           if [ -n "${{ matrix.target }}" ]; then
             export SPC_TARGET="${{ matrix.target }}"
           fi
           
-          ./spc.phar build "bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,imagick,intl,ldap,lz4,mbstring,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib" \
+          # Isola o modo debug estritamente para a versão 8.3
+          DEBUG_FLAG=""
+          if [ "${{ inputs.php_version }}" == "8.3" ]; then
+            DEBUG_FLAG="--debug"
+            echo "Ativando modo debug para diagnóstico do PHP 8.3..."
+          fi
+          
+          ./spc build "bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib" \
             --build-cli \
             --build-fpm \
-            --build-shared="xdebug"
+            --build-shared="xdebug" $DEBUG_FLAG
 
       - name: Estruturar Diretórios, Identificar Versão e Gerar Tarball
         id: package
