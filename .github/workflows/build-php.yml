@@ -21,6 +21,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: write
+
 jobs:
   setup-matrix:
     runs-on: ubuntu-latest
@@ -127,8 +130,7 @@ jobs:
           find buildroot/ -name "xdebug.so" -exec cp {} release_talos/ext/ \;
           
           # 3. Empacota utilizando o formato e nomenclatura estrita
-          TAR_FILENAME="php-${EXACT_VERSION}-${{ matrix.os_name }}-${{ matrix.arch }}.tar.gz"
-          cd release_talos
+          TAR_FILENAME="php-${{ inputs.php_version }}-${{ matrix.os_name }}-${{ matrix.arch }}.tar.gz"          cd release_talos
           tar -czf "../$TAR_FILENAME" bin ext
           cd ..
           
