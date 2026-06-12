@@ -31,16 +31,18 @@ jobs:
         run: |
           MATRIX="[]"
           
+          # A flag -c garante que o output do jq seja sempre em uma única linha
           if [ "${{ inputs.build_mac_arm }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq '. += [{"os_runner": "macos-14", "os_name": "darwin", "arch": "arm64", "target": ""}]')
+            MATRIX=$(echo $MATRIX | jq -c '. += [{"os_runner": "macos-14", "os_name": "darwin", "arch": "arm64", "target": ""}]')
           fi
           if [ "${{ inputs.build_linux_amd }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq '. += [{"os_runner": "ubuntu-24.04", "os_name": "linux", "arch": "amd64", "target": "x86_64-linux-gnu"}]')
+            MATRIX=$(echo $MATRIX | jq -c '. += [{"os_runner": "ubuntu-24.04", "os_name": "linux", "arch": "amd64", "target": "x86_64-linux-gnu"}]')
           fi
           if [ "${{ inputs.build_linux_arm }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq '. += [{"os_runner": "ubuntu-24.04-arm", "os_name": "linux", "arch": "arm64", "target": "aarch64-linux-gnu"}]')
+            MATRIX=$(echo $MATRIX | jq -c '. += [{"os_runner": "ubuntu-24.04-arm", "os_name": "linux", "arch": "arm64", "target": "aarch64-linux-gnu"}]')
           fi
           
+          # Agora a string inteira é garantidamente enviada em uma única linha
           echo "matrix={\"include\":$MATRIX}" >> $GITHUB_OUTPUT
 
   build:
