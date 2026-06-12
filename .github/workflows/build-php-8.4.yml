@@ -1,13 +1,8 @@
-name: Build Talos Static PHP
+name: Build Talos PHP 8.4
 
 on:
   workflow_dispatch:
     inputs:
-      php_version:
-        description: 'Versão alvo do PHP (ex: 8.3, 8.4, 8.5)'
-        required: true
-        default: '8.5'
-        type: string
       build_mac_arm:
         description: 'macOS ARM64 (Apple Silicon)'
         type: boolean
@@ -21,6 +16,9 @@ on:
         type: boolean
         default: true
 
+env:
+  PHP_TARGET_VERSION: "8.4"
+
 permissions:
   contents: write
 
@@ -33,7 +31,6 @@ jobs:
       - id: set-matrix
         run: |
           MATRIX="[]"
-          
           if [ "${{ inputs.build_mac_arm }}" == "true" ]; then
             MATRIX=$(echo $MATRIX | jq -c '. += [{"os_runner": "macos-14", "os_name": "darwin", "arch": "arm64", "target": ""}]')
           fi
@@ -43,7 +40,6 @@ jobs:
           if [ "${{ inputs.build_linux_arm }}" == "true" ]; then
             MATRIX=$(echo $MATRIX | jq -c '. += [{"os_runner": "ubuntu-24.04-arm", "os_name": "linux", "arch": "arm64", "target": "aarch64-linux-gnu"}]')
           fi
-          
           echo "matrix={\"include\":$MATRIX}" >> $GITHUB_OUTPUT
 
   build:
@@ -62,98 +58,67 @@ jobs:
         if: matrix.os_name == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget curl jq musl-tools \
-            build-essential autoconf libtool bison re2c pkg-config
+          sudo apt-get install -y wget curl jq musl-tools build-essential autoconf libtool bison re2c pkg-config
 
       - name: Baixar e Configurar SPC (static-php-cli)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "${{ matrix.os_name }}" == "darwin" ]; then
-            SPC_OS="macos"
-          else
-            SPC_OS="linux"
-          fi
-          
-          if [ "${{ matrix.arch }}" == "amd64" ]; then
-            SPC_ARCH="x86_64"
-          else
-            SPC_ARCH="aarch64"
-          fi
-          
+          SPC_OS=$([ "${{ matrix.os_name }}" == "darwin" ] && echo "macos" || echo "linux")
+          SPC_ARCH=$([ "${{ matrix.arch }}" == "amd64" ] && echo "x86_64" || echo "aarch64")
           SPC_FILE="spc-${SPC_OS}-${SPC_ARCH}.tar.gz"
-          echo "Baixando o binário nativo: $SPC_FILE"
           
           gh release download --repo crazywhalecc/static-php-cli --pattern "$SPC_FILE"
+          tar -xzf "$SPC_FILE" && chmod +x spc
           
-          tar -xzf "$SPC_FILE"
-          chmod +x spc
-          
-          # Injeta o target ANTES do doctor para que ele instale o compilador Zig no Linux
           if [ -n "${{ matrix.target }}" ]; then
             export SPC_TARGET="${{ matrix.target }}"
           fi
-          
           ./spc doctor --auto-fix
 
-      - name: Download de Fontes (PHP + Dependências C + Extensões)
+      - name: Download de Fontes (Injetando libs gráficas para WebP)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ./spc download --with-php="${{ inputs.php_version }}" \
-          --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug"
+          ./spc download --with-php="${{ env.PHP_TARGET_VERSION }}" \
+          --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug" \
+          --for-libs="libjpeg,libwebp,freetype"
 
-      - name: Compilar PHP Estático e Xdebug Dinâmico
+      - name: Compilar PHP Estático (Com suporte nativo a WebP)
         run: |
           if [ -n "${{ matrix.target }}" ]; then
             export SPC_TARGET="${{ matrix.target }}"
-          fi
-          
-          # Bloqueia a detecção de IFUNC estritamente no PHP 8.3 para arquitetura x86_64.
-          # Isso contorna o bug crítico do linker do compilador Zig na extensão mbstring.
-          if [[ "${{ inputs.php_version }}" == 8.3* ]] && [ "${{ matrix.arch }}" == "amd64" ]; then
-            export ac_cv_func_ifunc=no
           fi
           
           ./spc build "bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib" \
             --build-cli \
             --build-fpm \
-            --build-shared="xdebug"
+            --build-shared="xdebug" \
+            --with-libs="libjpeg,libwebp,freetype"
 
-      - name: Estruturar Diretórios e Gerar Tarball
+      - name: Estruturar e Empacotar
         id: package
         run: |
           EXACT_VERSION=$(./buildroot/bin/php -r "echo PHP_VERSION;")
           
-          # Exibe o resultado de forma limpa na dashboard do Actions
-          echo "### 🚀 Build Concluído: ${{ matrix.os_name }} (${{ matrix.arch }})" >> $GITHUB_STEP_SUMMARY
-          echo "- **Versão Exata do PHP:** \`$EXACT_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Build PHP ${{ env.PHP_TARGET_VERSION }} Concluído: ${{ matrix.os_name }} (${{ matrix.arch }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Versão Exata:** \`$EXACT_VERSION\`" >> $GITHUB_STEP_SUMMARY
           
           mkdir -p release_talos/bin release_talos/ext
           cp buildroot/bin/php release_talos/bin/
           cp buildroot/bin/php-fpm release_talos/bin/
-          
           find buildroot/ -name "xdebug.so" -exec cp {} release_talos/ext/ \;
           
-          TAR_FILENAME="php-${{ inputs.php_version }}-${{ matrix.os_name }}-${{ matrix.arch }}.tar.gz"
+          TAR_FILENAME="php-${{ env.PHP_TARGET_VERSION }}-${{ matrix.os_name }}-${{ matrix.arch }}.tar.gz"
           cd release_talos
           tar -czf "../$TAR_FILENAME" bin ext
           cd ..
           
           echo "tar_filename=$TAR_FILENAME" >> $GITHUB_OUTPUT
 
-      - name: Upload Artifact (Para Retenção Curta)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.package.outputs.tar_filename }}
-          path: ${{ steps.package.outputs.tar_filename }}
-
-      - name: Publicar na Release 'latest'
+      - name: Publicar na Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create latest \
-            --title "Talos Latest Binaries" \
-            --notes "Binários estáticos do ecossistema Talos, gerados automaticamente." || true
-            
+          gh release create latest --title "Talos Latest Binaries" || true
           gh release upload latest ./${{ steps.package.outputs.tar_filename }} --clobber
