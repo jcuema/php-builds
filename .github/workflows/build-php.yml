@@ -10,16 +10,16 @@ on:
         type: string
       build_mac_arm:
         description: 'macOS ARM64 (Apple Silicon)'
-        type: boolean
+        type: false
         default: true
       build_linux_amd:
         description: 'Linux AMD64'
         type: boolean
-        default: true
+        default: false
       build_linux_arm:
         description: 'Linux ARM64'
         type: boolean
-        default: true
+        default: false
 
 jobs:
   setup-matrix:
@@ -65,9 +65,34 @@ jobs:
             build-essential autoconf libtool bison re2c pkg-config
 
       - name: Baixar e Configurar SPC (static-php-cli)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          wget -O spc.phar "https://github.com/crazywhalecc/static-php-cli/releases/latest/download/spc.phar"
-          chmod +x spc.phar
+          # 1. Determina o nome correto do artefato baseado na matriz atual
+          if [ "${{ matrix.os_name }}" == "darwin" ]; then
+            SPC_OS="macos"
+          else
+            SPC_OS="linux"
+          fi
+          
+          if [ "${{ matrix.arch }}" == "amd64" ]; then
+            SPC_ARCH="x86_64"
+          else
+            SPC_ARCH="aarch64"
+          fi
+          
+          SPC_FILE="spc-${SPC_OS}-${SPC_ARCH}.tar.gz"
+          echo "Baixando o binário nativo: $SPC_FILE"
+          
+          # 2. Usa o GitHub CLI para baixar o asset do último release
+          gh release download --repo crazywhalecc/static-php-cli --pattern "$SPC_FILE"
+          
+          # 3. Extrai e configura o binário
+          tar -xzf "$SPC_FILE"
+          chmod +x spc
+          
+          # Valida se o binário está executando
+          ./spc --version
 
       - name: Download de Fontes (PHP + Dependências C + Extensões)
         # O SPC resolve "8.5" para a versão patch mais recente (ex: 8.5.5) automaticamente
