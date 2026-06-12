@@ -10,8 +10,8 @@ on:
         type: string
       build_mac_arm:
         description: 'macOS ARM64 (Apple Silicon)'
-        type: false
-        default: true
+        type: boolean
+        default: false
       build_linux_amd:
         description: 'Linux AMD64'
         type: boolean
