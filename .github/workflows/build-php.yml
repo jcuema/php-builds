@@ -109,9 +109,10 @@ jobs:
             export SPC_TARGET="${{ matrix.target }}"
           fi
           
-          # Nivelamento de compatibilidade de compilador (LLVM 16+) para código legado do PHP <= 8.3
-          export CFLAGS="-Wno-incompatible-pointer-types -Wno-implicit-function-declaration -Wno-int-conversion"
-          export EXTRA_CFLAGS="$CFLAGS"
+          # Isolamento rigoroso: Aplica tolerância APENAS no build do core do PHP e APENAS na versão 8.3
+          if [ "${{ inputs.php_version }}" == "8.3" ]; then
+            export EXTRA_CFLAGS="-Wno-incompatible-pointer-types -Wno-implicit-function-declaration -Wno-int-conversion"
+          fi
           
           ./spc build "bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib" \
             --build-cli \
