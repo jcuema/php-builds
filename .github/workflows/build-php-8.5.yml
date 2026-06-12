@@ -1,0 +1,124 @@
+name: Build Talos PHP 8.5
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_mac_arm:
+        description: 'macOS ARM64 (Apple Silicon)'
+        type: boolean
+        default: true
+      build_linux_amd:
+        description: 'Linux AMD64'
+        type: boolean
+        default: true
+      build_linux_arm:
+        description: 'Linux ARM64'
+        type: boolean
+        default: true
+
+env:
+  PHP_TARGET_VERSION: "8.5"
+
+permissions:
+  contents: write
+
+jobs:
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        run: |
+          MATRIX="[]"
+          if [ "${{ inputs.build_mac_arm }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c '. += [{"os_runner": "macos-14", "os_name": "darwin", "arch": "arm64", "target": ""}]')
+          fi
+          if [ "${{ inputs.build_linux_amd }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c '. += [{"os_runner": "ubuntu-24.04", "os_name": "linux", "arch": "amd64", "target": "x86_64-linux-gnu"}]')
+          fi
+          if [ "${{ inputs.build_linux_arm }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c '. += [{"os_runner": "ubuntu-24.04-arm", "os_name": "linux", "arch": "arm64", "target": "aarch64-linux-gnu"}]')
+          fi
+          echo "matrix={\"include\":$MATRIX}" >> $GITHUB_OUTPUT
+
+  build:
+    needs: setup-matrix
+    if: ${{ fromJson(needs.setup-matrix.outputs.matrix).include[0] != null }}
+    runs-on: ${{ matrix.os_runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Instalar Dependências Base (Linux)
+        if: matrix.os_name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget curl jq musl-tools build-essential autoconf libtool bison re2c pkg-config
+
+      - name: Baixar e Configurar SPC (static-php-cli)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SPC_OS=$([ "${{ matrix.os_name }}" == "darwin" ] && echo "macos" || echo "linux")
+          SPC_ARCH=$([ "${{ matrix.arch }}" == "amd64" ] && echo "x86_64" || echo "aarch64")
+          SPC_FILE="spc-${SPC_OS}-${SPC_ARCH}.tar.gz"
+          
+          gh release download --repo crazywhalecc/static-php-cli --pattern "$SPC_FILE"
+          tar -xzf "$SPC_FILE" && chmod +x spc
+          
+          if [ -n "${{ matrix.target }}" ]; then
+            export SPC_TARGET="${{ matrix.target }}"
+          fi
+          ./spc doctor --auto-fix
+
+      - name: Download de Fontes (Injetando libs gráficas para WebP)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./spc download --with-php="${{ env.PHP_TARGET_VERSION }}" \
+          --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug" \
+          --for-libs="libjpeg,libwebp,freetype"
+
+      - name: Compilar PHP Estático (Com suporte nativo a WebP)
+        run: |
+          if [ -n "${{ matrix.target }}" ]; then
+            export SPC_TARGET="${{ matrix.target }}"
+          fi
+          
+          ./spc build "bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib" \
+            --build-cli \
+            --build-fpm \
+            --build-shared="xdebug" \
+            --with-libs="libjpeg,libwebp,freetype"
+
+      - name: Estruturar e Empacotar
+        id: package
+        run: |
+          EXACT_VERSION=$(./buildroot/bin/php -r "echo PHP_VERSION;")
+          
+          echo "### 🚀 Build PHP ${{ env.PHP_TARGET_VERSION }} Concluído: ${{ matrix.os_name }} (${{ matrix.arch }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Versão Exata:** \`$EXACT_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          
+          mkdir -p release_talos/bin release_talos/ext
+          cp buildroot/bin/php release_talos/bin/
+          cp buildroot/bin/php-fpm release_talos/bin/
+          find buildroot/ -name "xdebug.so" -exec cp {} release_talos/ext/ \;
+          
+          TAR_FILENAME="php-${{ env.PHP_TARGET_VERSION }}-${{ matrix.os_name }}-${{ matrix.arch }}.tar.gz"
+          cd release_talos
+          tar -czf "../$TAR_FILENAME" bin ext
+          cd ..
+          
+          echo "tar_filename=$TAR_FILENAME" >> $GITHUB_OUTPUT
+
+      - name: Publicar na Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create latest --title "Talos Latest Binaries" || true
+          gh release upload latest ./${{ steps.package.outputs.tar_filename }} --clobber
