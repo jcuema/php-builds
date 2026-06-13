@@ -76,12 +76,12 @@ jobs:
           fi
           ./spc doctor --auto-fix
 
-      - name: Download de Fontes
+      - name: Download de Fontes (Sem mongodb)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ./spc download --with-php="${{ env.PHP_TARGET_VERSION }}" \
-          --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug" \
+          --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug" \
           --for-libs="libjpeg,libwebp,freetype"
 
       - name: Extração Nativa e Neutralização Física (Apenas AMD64)
@@ -95,13 +95,13 @@ jobs:
             find source/php-src/ -type f -name "*.h" -exec sed -i 's/HAVE_AVX512/DISABLED_AVX512/g' {} +
           fi
 
-      - name: Compilar PHP Estático
+      - name: Compilar PHP Estático (Sem mongodb)
         run: |
           if [ -n "${{ matrix.target }}" ]; then
             export SPC_TARGET="${{ matrix.target }}"
           fi
           
-          ./spc build "bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib" \
+          ./spc build "bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib" \
             --build-cli \
             --build-fpm \
             --build-shared="xdebug" \
