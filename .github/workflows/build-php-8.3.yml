@@ -84,21 +84,15 @@ jobs:
           --for-extensions="bcmath,bz2,calendar,ctype,curl,dba,dom,exif,ffi,fileinfo,filter,ftp,gd,gmp,iconv,igbinary,intl,ldap,lz4,mbstring,mbregex,mongodb,mysqli,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib,xdebug" \
           --for-libs="libjpeg,libwebp,freetype"
 
-      - name: Extração Nativa e Neutralização Física (Apenas AMD64)
+      - name: Extração e Expurgo do AVX512 (Apenas AMD64)
         run: |
           if [ "${{ matrix.arch }}" == "amd64" ]; then
-            echo "1. Extraindo código-fonte do PHP via ferramenta oficial..."
+            echo "1. Extraindo código-fonte do PHP..."
             ./spc extract php-src
             
-            echo "2. Assassinando detecção de hardware AVX512 em todo o código C do PHP..."
-            find source/php-src/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i \
-              -e 's/__AVX512F__/__DISABLED_AVX__/g' \
-              -e 's/__AVX512VBMI__/__DISABLED_AVX__/g' \
-              -e 's/__AVX512VL__/__DISABLED_AVX__/g' \
-              -e 's/__AVX512BW__/__DISABLED_AVX__/g' \
-              -e 's/__AVX512DQ__/__DISABLED_AVX__/g' \
-              -e 's/__AVX512CD__/__DISABLED_AVX__/g' \
-              -e 's/HAVE_AVX512_VBMI/DISABLED_HAVE_AVX/g' {} +
+            echo "2. Renomeando a constante HAVE_AVX512 para cegar o compilador Zig..."
+            find source/php-src/ -type f -name "*.c" -exec sed -i 's/HAVE_AVX512/DISABLED_AVX512/g' {} +
+            find source/php-src/ -type f -name "*.h" -exec sed -i 's/HAVE_AVX512/DISABLED_AVX512/g' {} +
           fi
 
       - name: Compilar PHP Estático
